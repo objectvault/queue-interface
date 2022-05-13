@@ -1,0 +1,10 @@
+# Basic Files and Directories
+##############################
+*~
+*#
+*.bak
+*.org
+
+# VSCode
+##########
+.vscode
