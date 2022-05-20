@@ -25,6 +25,7 @@ type InvitationEmailMessage struct {
 	code       string // [REQUIRED] Invitation Code
 	byUser     string // [REQUIRED] User Name (orm.User.Name())
 	atUser     string // [REQUIRED] User ID (orm.User.Email())
+	message    string // [OPTIONAL] Message to Invitee
 	objectName string // [REQUIRED] Store Name (orm.Store.Name() or orm.Org.Name())
 }
 
@@ -200,6 +201,22 @@ func (m *InvitationEmailMessage) SetAtUser(user string) (string, error) {
 
 	// New State
 	m.atUser = user
+	return current, nil
+}
+
+func (m *InvitationEmailMessage) Message() string {
+	return m.message
+}
+
+func (m *InvitationEmailMessage) SetMessage(msg string) (string, error) {
+	// Is Template Name Empty?
+	msg = strings.TrimSpace(msg)
+
+	// Current State
+	current := m.message
+
+	// New State
+	m.message = msg
 	return current, nil
 }
 
