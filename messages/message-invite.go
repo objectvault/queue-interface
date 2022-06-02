@@ -14,28 +14,47 @@ import (
 	"encoding/json"
 	"errors"
 	"strings"
+	"time"
 
 	"github.com/objectvault/queue-interface/shared"
 )
 
-type InvitationEmailMessage struct {
-	EmailMessage        // DERIVED FROM
-	code         string // [REQUIRED] Invitation Code
-	byUser       string // [REQUIRED] User Name (orm.User.Name())
-	atUser       string // [REQUIRED] User ID (orm.User.Email())
-	message      string // [OPTIONAL] Message to Invitee
-	objectName   string // [REQUIRED] Store Name (orm.Store.Name() or orm.Org.Name())
+type InviteMessage struct {
+	EmailMessage            // DERIVED FROM
+	code         string     // [REQUIRED] Invitation Code
+	byUser       string     // [REQUIRED] User Name (orm.User.Name())
+	atUser       string     // [REQUIRED] User ID (orm.User.Email())
+	message      string     // [OPTIONAL] Message to Invitee
+	objectName   string     // [REQUIRED] Store Name (orm.Store.Name() or orm.Org.Name())
+	expiration   *time.Time // [REQUIRED] Expiration Time Stamp
 }
 
-func (m *InvitationEmailMessage) IsValid() bool {
-	return m.EmailMessage.IsValid() && (m.code != "") && (m.byUser != "") && (m.objectName != "")
+func NewInviteMessage(template string, code string) (*InviteMessage, error) {
+	// Create Invitation
+	m := &InviteMessage{}
+
+	// Initialize Email Message Base
+	err := InitEmailMessage(&m.EmailMessage, "invite", template)
+	if err != nil {
+		return nil, err
+	}
+
+	// Save Code (Note: ALLOW code == "")
+	code = strings.TrimSpace(code)
+	m.code = strings.ToLower(code)
+
+	return m, nil
 }
 
-func (m *InvitationEmailMessage) Code() string {
+func (m *InviteMessage) IsValid() bool {
+	return m.EmailMessage.IsValid() && (m.code != "") && (m.byUser != "") && (m.objectName != "") && (m.expiration != nil)
+}
+
+func (m *InviteMessage) Code() string {
 	return m.code
 }
 
-func (m *InvitationEmailMessage) SetCode(code string) (string, error) {
+func (m *InviteMessage) SetCode(code string) (string, error) {
 	// Is Software Activation Code Empty?
 	code = strings.TrimSpace(code)
 	if code == "" {
@@ -53,11 +72,11 @@ func (m *InvitationEmailMessage) SetCode(code string) (string, error) {
 	return current, nil
 }
 
-func (m *InvitationEmailMessage) ByUser() string {
+func (m *InviteMessage) ByUser() string {
 	return m.byUser
 }
 
-func (m *InvitationEmailMessage) SetByUser(user string) (string, error) {
+func (m *InviteMessage) SetByUser(user string) (string, error) {
 	// Is Name Empty?
 	user = strings.TrimSpace(user)
 	if user == "" {
@@ -72,11 +91,11 @@ func (m *InvitationEmailMessage) SetByUser(user string) (string, error) {
 	return current, nil
 }
 
-func (m *InvitationEmailMessage) AtUser() string {
+func (m *InviteMessage) AtUser() string {
 	return m.atUser
 }
 
-func (m *InvitationEmailMessage) SetAtUser(user string) (string, error) {
+func (m *InviteMessage) SetAtUser(user string) (string, error) {
 	// Is Email Empty?
 	user = strings.TrimSpace(user)
 	if user == "" {
@@ -94,11 +113,11 @@ func (m *InvitationEmailMessage) SetAtUser(user string) (string, error) {
 	return current, nil
 }
 
-func (m *InvitationEmailMessage) Message() string {
+func (m *InviteMessage) Message() string {
 	return m.message
 }
 
-func (m *InvitationEmailMessage) SetMessage(msg string) (string, error) {
+func (m *InviteMessage) SetMessage(msg string) (string, error) {
 	// Is Template Name Empty?
 	msg = strings.TrimSpace(msg)
 
@@ -110,11 +129,11 @@ func (m *InvitationEmailMessage) SetMessage(msg string) (string, error) {
 	return current, nil
 }
 
-func (m *InvitationEmailMessage) ObjectName() string {
+func (m *InviteMessage) ObjectName() string {
 	return m.objectName
 }
 
-func (m *InvitationEmailMessage) SetObjectName(name string) (string, error) {
+func (m *InviteMessage) SetObjectName(name string) (string, error) {
 	// Is Name Empty?
 	name = strings.TrimSpace(name)
 	if name == "" {
@@ -129,11 +148,34 @@ func (m *InvitationEmailMessage) SetObjectName(name string) (string, error) {
 	return current, nil
 }
 
+func (m *InviteMessage) Expiration() *time.Time {
+	return m.expiration
+}
+
+func (m *InviteMessage) ExpirationUTC() string {
+	if m.expiration != nil {
+		utc := m.expiration.UTC()
+		// RETURN ISO 8601 / RFC 3339 FORMAT in UTC
+		return utc.Format(time.RFC3339)
+	}
+
+	return ""
+}
+
+func (m *InviteMessage) SetExpiration(t time.Time) (*time.Time, error) {
+	// Current State
+	current := m.expiration
+
+	// New State
+	m.expiration = &t
+	return current, nil
+}
+
 // MarshalJSON implements json.Marshal
-func (m InvitationEmailMessage) MarshalJSON() ([]byte, error) {
+func (m InviteMessage) MarshalJSON() ([]byte, error) {
 	// Is Message Valid?
 	if !m.IsValid() { // NO
-		return nil, errors.New("[InvitationEmailMessage] Message is Invalid")
+		return nil, errors.New("[InviteMessage] Message is Invalid")
 	}
 
 	// Is Message Creation Date Set?
@@ -182,16 +224,21 @@ func (m InvitationEmailMessage) MarshalJSON() ([]byte, error) {
 
 	// Email Invitation //
 	invite := &struct {
-		Code    string `json:"code"`
-		Invitee string `json:"invitee"`
-		Email   string `json:"invitee_email"`
-		To      string `json:"to"`
+		Code       string `json:"code"`
+		Invitee    string `json:"invitee"`
+		Email      string `json:"invitee_email"`
+		To         string `json:"to"`
+		Message    string `json:"message,omitempty"`
+		Expiration string `json:"expiration"`
 	}{
-		Code:    m.code,
-		Invitee: m.byUser,
-		Email:   m.atUser,
-		To:      m.objectName,
+		Code:       m.code,
+		Invitee:    m.byUser,
+		Email:      m.atUser,
+		To:         m.objectName,
+		Message:    m.message,
+		Expiration: m.ExpirationUTC(),
 	}
+
 	// Complete JSON Message //
 	output := &struct {
 		Version int                     `json:"version"`
@@ -219,7 +266,7 @@ func (m InvitationEmailMessage) MarshalJSON() ([]byte, error) {
 }
 
 // UnmarshalJSON implements json.Unmarshal
-func (m *InvitationEmailMessage) UnmarshalJSON(b []byte) error {
+func (m *InviteMessage) UnmarshalJSON(b []byte) error {
 	in := &struct {
 		Version int                     `json:"version"`
 		ID      string                  `json:"id"`
@@ -243,10 +290,12 @@ func (m *InvitationEmailMessage) UnmarshalJSON(b []byte) error {
 			Headers  *map[string]string `json:"headers,omitempty"`
 		} `json:"email"`
 		Invite *struct {
-			Code    string `json:"code"`
-			Invitee string `json:"invitee"`
-			Email   string `json:"invitee_email"`
-			To      string `json:"to"`
+			Code       string `json:"code"`
+			Invitee    string `json:"invitee"`
+			Email      string `json:"invitee_email"`
+			To         string `json:"to"`
+			Message    string `json:"message,omitempty"`
+			Expiration string `json:"expiration"`
 		} `json:"invite"`
 	}{}
 
@@ -289,5 +338,15 @@ func (m *InvitationEmailMessage) UnmarshalJSON(b []byte) error {
 	m.byUser = in.Invite.Invitee
 	m.atUser = in.Invite.Email
 	m.objectName = in.Invite.To
+	m.message = in.Invite.Message
+
+	// Extract Expiration Time (Expected ISO8601 / RFC3339 Format)
+	ts := in.Invite.Expiration
+	t, err := time.Parse(time.RFC3339, ts)
+	if err != nil {
+		return err
+	}
+	m.expiration = &t
+
 	return nil
 }

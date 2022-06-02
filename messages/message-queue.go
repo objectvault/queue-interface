@@ -35,6 +35,39 @@ type QueueMessage struct {
 	errorMessage string                  // Error Message
 }
 
+func NewQueueMessage(t string, st string) (*QueueMessage, error) {
+	m := &QueueMessage{}
+	err := InitQueueMessage(m, t, st)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return m, nil
+}
+
+func InitQueueMessage(m *QueueMessage, t string, st string) error {
+	m.version = 1
+
+	// TODO: Need Some Sort of Prefix to Avoid Collisions if in a Cluster
+	// Current TimeStamp
+	now := time.Now().UTC()
+	m.id = now.Format(time.RFC3339)
+
+	// Validate Message Type
+	t = strings.TrimSpace(t)
+	if t == "" {
+		return errors.New("[QueueMessage] Missing Message Type")
+	}
+	m.mtype = strings.ToLower(t)
+
+	// Set Sub Type
+	st = strings.TrimSpace(st)
+	m.msubtype = strings.ToLower(st)
+
+	return nil
+}
+
 func (m *QueueMessage) IsValid() bool {
 	return (m.id != "") && (m.mtype != "")
 }

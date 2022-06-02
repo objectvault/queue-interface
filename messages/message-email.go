@@ -31,6 +31,31 @@ type EmailMessage struct {
 	headers      *map[string]string // [OPTIONAL] Extra Headers
 }
 
+func NewEmailMessage(st string, template string) (*EmailMessage, error) {
+	m := &EmailMessage{}
+	err := InitEmailMessage(m, st, template)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return m, nil
+}
+
+func InitEmailMessage(m *EmailMessage, st string, template string) error {
+	// Initialize Queue Message
+	err := InitQueueMessage(&m.QueueMessage, "email", st)
+	if err != nil {
+		return err
+	}
+
+	// Save Template (Note: ALLOW template == "")
+	template = strings.TrimSpace(template)
+	m.template = strings.ToLower(template)
+
+	return nil
+}
+
 func (m *EmailMessage) IsValid() bool {
 	return m.QueueMessage.IsValid() && (m.template != "") && (m.to != "")
 }
