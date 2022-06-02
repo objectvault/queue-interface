@@ -14,131 +14,21 @@ import (
 	"encoding/json"
 	"errors"
 	"strings"
+
+	"github.com/objectvault/queue-interface/shared"
 )
 
 type InvitationEmailMessage struct {
-	version    int    // [REQUIRED] Message Version
-	template   string // [REQUIRED] Email Template to Use
-	language   string // [OPTIONAL:DEFAULT en_US] System Default Language
-	to         string // [REQUIRED] Invitee's Email Address
-	from       string // [OPTIONAL] default no-reply@...
-	code       string // [REQUIRED] Invitation Code
-	byUser     string // [REQUIRED] User Name (orm.User.Name())
-	atUser     string // [REQUIRED] User ID (orm.User.Email())
-	message    string // [OPTIONAL] Message to Invitee
-	objectName string // [REQUIRED] Store Name (orm.Store.Name() or orm.Org.Name())
+	EmailMessage        // DERIVED FROM
+	code         string // [REQUIRED] Invitation Code
+	byUser       string // [REQUIRED] User Name (orm.User.Name())
+	atUser       string // [REQUIRED] User ID (orm.User.Email())
+	message      string // [OPTIONAL] Message to Invitee
+	objectName   string // [REQUIRED] Store Name (orm.Store.Name() or orm.Org.Name())
 }
 
-func (m *InvitationEmailMessage) Version() int {
-	if m.version > 0 {
-		return m.version
-	}
-
-	return 1
-}
-
-func (m *InvitationEmailMessage) SetVersion(v int) (int, error) {
-	// Valid Version?
-	if v <= 0 { // NO
-		return 0, errors.New("[InvitationEmailMessage] Invalid Message Version")
-	}
-
-	// Current State
-	current := m.version
-
-	// New State
-	m.version = v
-	return current, nil
-}
-
-func (m *InvitationEmailMessage) Template() string {
-	return m.template
-}
-
-func (m *InvitationEmailMessage) SetTemplate(t string) (string, error) {
-	// Is Template Name Empty?
-	t = strings.TrimSpace(t)
-	if t == "" {
-		return "", errors.New("Invitation Template is Required")
-	}
-
-	// To is always lower case
-	t = strings.ToLower(t)
-
-	// Current State
-	current := m.template
-
-	// New State
-	m.template = t
-	return current, nil
-}
-
-func (m *InvitationEmailMessage) Language() string {
-	if m.language == "" {
-		return "en_US"
-	}
-
-	return m.language
-}
-
-func (m *InvitationEmailMessage) SetLanguage(l string) (string, error) {
-	// Is Template Name Empty?
-	l = strings.TrimSpace(l)
-
-	// Language Tuplets are always lower case
-	l = strings.ToLower(l)
-
-	// Current State
-	current := m.language
-
-	// New State
-	m.language = l
-	return current, nil
-}
-
-func (m *InvitationEmailMessage) To() string {
-	return m.to
-}
-
-func (m *InvitationEmailMessage) SetTo(to string) (string, error) {
-	// Is Template Name Empty?
-	to = strings.TrimSpace(to)
-	if to == "" {
-		return "", errors.New("Email Destination is Required")
-	}
-
-	// To is always lower case
-	to = strings.ToLower(to)
-
-	// Current State
-	current := m.to
-
-	// New State
-	m.to = to
-	return current, nil
-}
-
-func (m *InvitationEmailMessage) From(d string) string {
-	if m.from == "" {
-		return d
-	}
-
-	return m.from
-}
-
-func (m *InvitationEmailMessage) SetFrom(from string) (string, error) {
-	// Is Template Name Empty?
-	from = strings.TrimSpace(from)
-
-	// From is always lower case
-	from = strings.ToLower(from)
-
-	// Current State
-	current := m.from
-
-	// New State
-	m.from = from
-	return current, nil
+func (m *InvitationEmailMessage) IsValid() bool {
+	return m.EmailMessage.IsValid() && (m.code != "") && (m.byUser != "") && (m.objectName != "")
 }
 
 func (m *InvitationEmailMessage) Code() string {
@@ -239,10 +129,6 @@ func (m *InvitationEmailMessage) SetObjectName(name string) (string, error) {
 	return current, nil
 }
 
-func (m *InvitationEmailMessage) IsValid() bool {
-	return (m.template != "") && (m.to != "") && (m.code != "") && (m.byUser != "") && (m.atUser != "") && (m.objectName != "")
-}
-
 // MarshalJSON implements json.Marshal
 func (m InvitationEmailMessage) MarshalJSON() ([]byte, error) {
 	// Is Message Valid?
@@ -250,56 +136,158 @@ func (m InvitationEmailMessage) MarshalJSON() ([]byte, error) {
 		return nil, errors.New("[InvitationEmailMessage] Message is Invalid")
 	}
 
-	return json.Marshal(&struct {
-		Version    int    `json:"version"`
-		Template   string `json:"template"`
-		Language   string `json:"locale"`
-		To         string `json:"to"`
-		From       string `json:"from,omitempty"`
-		Code       string `json:"code"`
-		ByUser     string `json:"invitee"`
-		AtUser     string `json:"invitee-email"`
-		ObjectName string `json:"object-name"`
+	// Is Message Creation Date Set?
+	if m.created == "" { // NO: Use Current Time
+		m.created = shared.UTCTimeStamp()
+	}
+
+	// QUEUE Counter and Settings //
+	queue := &struct {
+		RequeueCount int    `json:"count,omitempty"`
+		ErrorCode    int    `json:"errorcode,omitempty"`
+		ErrorTime    string `json:"errortime,omitempty"`
+		ErrorMessage string `json:"errormsg,omitempty"`
+	}{}
+
+	// Has the Message been Requeued?
+	if m.requeueCount > 0 { // YES
+		queue.RequeueCount = m.requeueCount
+	}
+
+	// Is this an Error Message?
+	if m.errorCode > 0 { // YES
+		queue.ErrorCode = m.errorCode
+		queue.ErrorTime = m.errorTime
+		queue.ErrorMessage = m.errorMessage
+	}
+
+	// Email Settings //
+	email := &struct {
+		Template string             `json:"template"`
+		Locale   string             `json:"locale"`
+		To       string             `json:"to"`
+		From     string             `json:"from,omitempty"`
+		CC       string             `json:"cc,omitempty"`
+		BCC      string             `json:"bcc,omitempty"`
+		Headers  *map[string]string `json:"headers,omitempty"`
 	}{
-		Version:    m.Version(),
-		Template:   m.Template(),
-		Language:   m.Language(),
-		To:         m.to,
-		From:       m.from,
-		Code:       m.code,
-		ByUser:     m.byUser,
-		AtUser:     m.atUser,
-		ObjectName: m.objectName,
-	})
+		Template: m.template,
+		Locale:   m.Locale(),
+		To:       m.to,
+		From:     m.from,
+		CC:       m.cc,
+		BCC:      m.bcc,
+		Headers:  m.headers,
+	}
+
+	// Email Invitation //
+	invite := &struct {
+		Code    string `json:"code"`
+		Invitee string `json:"invitee"`
+		Email   string `json:"invitee_email"`
+		To      string `json:"to"`
+	}{
+		Code:    m.code,
+		Invitee: m.byUser,
+		Email:   m.atUser,
+		To:      m.objectName,
+	}
+	// Complete JSON Message //
+	output := &struct {
+		Version int                     `json:"version"`
+		ID      string                  `json:"id"`
+		Type    string                  `json:"type"`
+		SubType string                  `json:"subtype,omitempty"`
+		Params  *map[string]interface{} `json:"data,omitempty"`
+		Created string                  `json:"created"`
+		Queue   interface{}             `json:"queue,omitempty"`
+		Email   interface{}             `json:"email"`
+		Invite  interface{}             `json:"invite"`
+	}{
+		Version: m.version,
+		ID:      m.id,
+		Type:    m.mtype,
+		SubType: m.msubtype,
+		Params:  m.params,
+		Created: m.created,
+		Queue:   queue,
+		Email:   email,
+		Invite:  invite,
+	}
+
+	return json.Marshal(output)
 }
 
 // UnmarshalJSON implements json.Unmarshal
 func (m *InvitationEmailMessage) UnmarshalJSON(b []byte) error {
-	iem := &struct {
-		Version    int    `json:"version"`
-		Template   string `json:"template"`
-		Language   string `json:"locale"`
-		To         string `json:"to"`
-		From       string `json:"from,omitempty"`
-		Code       string `json:"code"`
-		ByUser     string `json:"invitee"`
-		AtUser     string `json:"invitee-email"`
-		ObjectName string `json:"object-name"`
+	in := &struct {
+		Version int                     `json:"version"`
+		ID      string                  `json:"id"`
+		Type    string                  `json:"type"`
+		SubType string                  `json:"subtype,omitempty"`
+		Params  *map[string]interface{} `json:"params,omitempty"`
+		Created string                  `json:"created"`
+		Queue   *struct {
+			RequeueCount int    `json:"count,omitempty"`
+			ErrorCode    int    `json:"errorcode,omitempty"`
+			ErrorTime    string `json:"errortime,omitempty"`
+			ErrorMessage string `json:"errormsg,omitempty"`
+		} `json:"errormsg,omitempty"`
+		Email *struct {
+			Template string             `json:"template"`
+			Locale   string             `json:"locale"`
+			To       string             `json:"to"`
+			From     string             `json:"from,omitempty"`
+			CC       string             `json:"cc,omitempty"`
+			BCC      string             `json:"bcc,omitempty"`
+			Headers  *map[string]string `json:"headers,omitempty"`
+		} `json:"email"`
+		Invite *struct {
+			Code    string `json:"code"`
+			Invitee string `json:"invitee"`
+			Email   string `json:"invitee_email"`
+			To      string `json:"to"`
+		} `json:"invite"`
 	}{}
 
-	err := json.Unmarshal(b, &iem)
+	err := json.Unmarshal(b, &in)
 	if err != nil {
 		return err
 	}
 
-	m.version = iem.Version
-	m.template = iem.Template
-	m.language = iem.Language
-	m.to = iem.To
-	m.from = iem.From
-	m.code = iem.Code
-	m.byUser = iem.ByUser
-	m.atUser = iem.AtUser
-	m.objectName = iem.ObjectName
+	// Basic Message Information
+	m.version = in.Version
+	m.id = in.ID
+	m.mtype = in.Type
+	m.msubtype = in.Type
+	m.params = in.Params
+	m.created = in.Created
+
+	// QUEUE Message Control Information //
+	if in.Queue != nil {
+		m.requeueCount = in.Queue.RequeueCount
+
+		// Has Error Message?
+		if in.Queue.ErrorCode > 0 { // YES
+			m.errorCode = in.Queue.ErrorCode
+			m.errorTime = in.Queue.ErrorTime
+			m.errorMessage = in.Queue.ErrorMessage
+		}
+	}
+
+	// EMAIL Message Parameters //
+	m.template = in.Email.Template
+	m.locale = in.Email.Locale
+	m.to = in.Email.To
+	m.from = in.Email.From
+	m.cc = in.Email.CC
+	m.bcc = in.Email.BCC
+	m.headers = in.Email.Headers
+
+	// INVITATION Message Parameters //
+	m.code = in.Invite.Code
+	m.byUser = in.Invite.Invitee
+	m.atUser = in.Invite.Email
+	m.objectName = in.Invite.To
 	return nil
 }

@@ -10,9 +10,12 @@ package messages
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+// cSpell:ignore mtype, msubtype
+
 import (
 	"encoding/json"
 	"errors"
+	"strconv"
 	"strings"
 	"time"
 
@@ -20,14 +23,20 @@ import (
 )
 
 type QueueMessage struct {
-	version      int          // [REQUIRED] Message Version
-	id           string       // [REQUIRED] Message ID
-	message      *interface{} // [REQUIRED] Actual Message Data
-	created      string       // [REQUIRED] Original Message Creation TimeStamp
-	requeueCount int          // Number of Times Message Requeued
-	errorCode    int          // Error Code : 0 OK
-	errorTime    string       // Error Time Stamp
-	errorMessage string       // Error Message
+	version      int                     // [REQUIRED] Message Version
+	id           string                  // [REQUIRED] Message ID
+	mtype        string                  // [REQUIRED] Message Type
+	msubtype     string                  // [OPTIONAL] Message Sub Type
+	params       *map[string]interface{} // [OPTIONAL] Optional Context Parameters
+	created      string                  // [REQUIRED] Original Message Creation TimeStamp
+	requeueCount int                     // Number of Times Message Requeued
+	errorCode    int                     // Error Code : 0 OK
+	errorTime    string                  // Error Time Stamp
+	errorMessage string                  // Error Message
+}
+
+func (m *QueueMessage) IsValid() bool {
+	return (m.id != "") && (m.mtype != "")
 }
 
 func (m *QueueMessage) Version() int {
@@ -74,22 +83,95 @@ func (m *QueueMessage) SetID(id string) (string, error) {
 	return current, nil
 }
 
-func (m *QueueMessage) Message() *interface{} {
-	return m.message
+func (m *QueueMessage) Type() string {
+	return m.mtype
 }
 
-func (m *QueueMessage) SetMessage(msg interface{}) (interface{}, error) {
-	// Is Template Empty?
-	if msg == nil {
-		return "", errors.New("[QueueMessage] Message Data is Required")
+func (m *QueueMessage) SetType(t string) (string, error) {
+	// Is ID Empty?
+	t = strings.TrimSpace(t)
+	if t == "" { // YES: Error
+		return "", errors.New("[QueueMessage] Request Type is Required")
+	}
+
+	// Message Types are always lower case
+	t = strings.ToLower(t)
+
+	// Current State
+	current := m.mtype
+
+	// New State
+	m.mtype = t
+	return current, nil
+}
+
+func (m *QueueMessage) SubType() string {
+	return m.mtype
+}
+
+func (m *QueueMessage) SetSubType(s string) (string, error) {
+	// Is Sub Type Empty?
+	s = strings.TrimSpace(s)
+	if s != "" { // NO: Message Sub Types are always lower case
+		s = strings.ToLower(s)
 	}
 
 	// Current State
-	current := m.message
+	current := m.msubtype
 
 	// New State
-	m.message = &msg
-	m.created = shared.UTCTimeStamp()
+	m.msubtype = s
+	return current, nil
+}
+
+func (m *QueueMessage) GetParameters() *map[string]interface{} {
+	return m.params
+}
+
+func (m *QueueMessage) HasParameter(n string) bool {
+	_, ok := (*m.params)[n]
+	return ok
+}
+
+func (m *QueueMessage) Parameter(n string) interface{} {
+	if m.params == nil {
+		return ""
+	}
+
+	value, ok := (*m.params)[n]
+	if ok {
+		return value
+	}
+	return ""
+}
+
+func (m *QueueMessage) SetParameter(n string, v interface{}) error {
+	// Do we already have a Parameters Map?
+	if m.params == nil { // NO: Create One
+		d := make(map[string]interface{})
+		m.params = &d
+	}
+
+	// New State
+	(*m.params)[n] = v
+	return nil
+}
+
+func (m *QueueMessage) SetIntParameter(n string, v int) error {
+	return m.SetParameter(n, strconv.Itoa(v))
+}
+
+func (m *QueueMessage) UnsetParameter(n string) (interface{}, error) {
+	if m.params == nil {
+		return "", nil
+	}
+
+	// Do we have a Current Value?
+	current, ok := (*m.params)[n]
+	if ok { // YES: Delete It
+		delete(*m.params, n)
+	}
+	// ELSE: No - Just Ignore Request
 
 	return current, nil
 }
@@ -152,10 +234,6 @@ func (m *QueueMessage) ErrorTime() *time.Time {
 	return nil
 }
 
-func (m *QueueMessage) IsValid() bool {
-	return (m.id != "") && (m.message != nil)
-}
-
 func (m *QueueMessage) IsError() bool {
 	return (m.errorCode > 0)
 }
@@ -167,32 +245,48 @@ func (m QueueMessage) MarshalJSON() ([]byte, error) {
 		return nil, errors.New("[QueueMessage] Message is Invalid")
 	}
 
-	output := &struct {
-		Version      int          `json:"version"`
-		ID           string       `json:"id"`
-		Message      *interface{} `json:"message"`
-		Created      string       `json:"created"`
-		RequeueCount int          `json:"count,omitempty"`
-		ErrorCode    int          `json:"errorcode,omitempty"`
-		ErrorTime    string       `json:"errortime,omitempty"`
-		ErrorMessage string       `json:"errormsg,omitempty"`
-	}{
-		Version: m.version,
-		ID:      m.id,
-		Message: m.message,
-		Created: m.created,
+	// Is Message Creation Date Set?
+	if m.created == "" { // NO: Use Current Time
+		m.created = shared.UTCTimeStamp()
 	}
+
+	// QUEUE Counter and Settings //
+	queue := &struct {
+		RequeueCount int    `json:"count,omitempty"`
+		ErrorCode    int    `json:"errorcode,omitempty"`
+		ErrorTime    string `json:"errortime,omitempty"`
+		ErrorMessage string `json:"errormsg,omitempty"`
+	}{}
 
 	// Has the Message been Requeued?
 	if m.requeueCount > 0 { // YES
-		output.RequeueCount = m.requeueCount
+		queue.RequeueCount = m.requeueCount
 	}
 
 	// Is this an Error Message?
 	if m.errorCode > 0 { // YES
-		output.ErrorCode = m.errorCode
-		output.ErrorTime = m.errorTime
-		output.ErrorMessage = m.errorMessage
+		queue.ErrorCode = m.errorCode
+		queue.ErrorTime = m.errorTime
+		queue.ErrorMessage = m.errorMessage
+	}
+
+	// Complete JSON Message //
+	output := &struct {
+		Version int                     `json:"version"`
+		ID      string                  `json:"id"`
+		Type    string                  `json:"type"`
+		SubType string                  `json:"subtype,omitempty"`
+		Params  *map[string]interface{} `json:"params,omitempty"`
+		Created string                  `json:"created"`
+		Queue   interface{}             `json:"queue,omitempty"`
+	}{
+		Version: m.version,
+		ID:      m.id,
+		Type:    m.mtype,
+		SubType: m.msubtype,
+		Params:  m.params,
+		Created: m.created,
+		Queue:   queue,
 	}
 
 	return json.Marshal(output)
@@ -201,14 +295,18 @@ func (m QueueMessage) MarshalJSON() ([]byte, error) {
 // UnmarshalJSON implements json.Unmarshal
 func (m *QueueMessage) UnmarshalJSON(b []byte) error {
 	me := &struct {
-		Version      int          `json:"version"`
-		ID           string       `json:"id"`
-		Message      *interface{} `json:"message"`
-		Created      string       `json:"created"`
-		RequeueCount int          `json:"count,omitempty"`
-		ErrorCode    int          `json:"errorcode,omitempty"`
-		ErrorTime    string       `json:"errortime,omitempty"`
-		ErrorMessage string       `json:"errormsg,omitempty"`
+		Version int                     `json:"version"`
+		ID      string                  `json:"id"`
+		Type    string                  `json:"type"`
+		SubType string                  `json:"subtype,omitempty"`
+		Params  *map[string]interface{} `json:"params,omitempty"`
+		Created string                  `json:"created"`
+		Queue   *struct {
+			RequeueCount int    `json:"count,omitempty"`
+			ErrorCode    int    `json:"errorcode,omitempty"`
+			ErrorTime    string `json:"errortime,omitempty"`
+			ErrorMessage string `json:"errormsg,omitempty"`
+		} `json:"errormsg,omitempty"`
 	}{}
 
 	err := json.Unmarshal(b, &me)
@@ -219,15 +317,22 @@ func (m *QueueMessage) UnmarshalJSON(b []byte) error {
 	// Basic Message Information
 	m.version = me.Version
 	m.id = me.ID
-	m.message = me.Message
+	m.mtype = me.Type
+	m.msubtype = me.Type
+	m.params = me.Params
 	m.created = me.Created
-	m.requeueCount = me.RequeueCount
 
-	// Is Error Message?
-	if me.ErrorCode > 0 { // YES
-		m.errorCode = me.ErrorCode
-		m.errorTime = me.ErrorTime
-		m.errorMessage = me.ErrorMessage
+	// QUEUE Message Control Information //
+	if me.Queue != nil {
+		m.requeueCount = me.Queue.RequeueCount
+
+		// Has Error Message?
+		if me.Queue.ErrorCode > 0 { // YES
+			m.errorCode = me.Queue.ErrorCode
+			m.errorTime = me.Queue.ErrorTime
+			m.errorMessage = me.Queue.ErrorMessage
+		}
 	}
+
 	return nil
 }

@@ -10,49 +10,29 @@ package messages
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+// cSpell:ignore mtype, msubtype
+
 import (
 	"encoding/json"
 	"errors"
-	"strconv"
 	"strings"
+
+	"github.com/objectvault/queue-interface/shared"
 )
 
 type EmailMessage struct {
-	version  int                     // [REQUIRED] Message Version
-	template string                  // [REQUIRED] Email Template to Use
-	language string                  // [OPTIONAL:DEFAULT en_US] User Preferred Language
-	to       string                  // [REQUIRED] User Email (i.e. test@test.net)
-	from     string                  // [OPTIONAL] default no-reply@test-to.com
-	cc       string                  // [OPTIONAL] cc1@test-to.com;cc2@test-to.com;
-	bcc      string                  // [OPTIONAL] bcc1@test-to.com;bcc2@test-to.com;
-	params   *map[string]interface{} // [OPTIONAL] TEMPLATE Parameters first.name = 'Paulo', etc.
-	headers  *map[string]string      // [OPTIONAL] Extra Headers
+	QueueMessage                    // DERIVED FROM
+	template     string             // [REQUIRED] Email Template to Use
+	locale       string             // [OPTIONAL:DEFAULT en_US] User Preferred Language
+	to           string             // [REQUIRED] User Email (i.e. test@test.net)
+	from         string             // [OPTIONAL] default no-reply@test-to.com
+	cc           string             // [OPTIONAL] cc1@test-to.com;cc2@test-to.com;
+	bcc          string             // [OPTIONAL] bcc1@test-to.com;bcc2@test-to.com;
+	headers      *map[string]string // [OPTIONAL] Extra Headers
 }
 
 func (m *EmailMessage) IsValid() bool {
-	return (m.template != "") && (m.to != "") && (m.params != nil)
-}
-
-func (m *EmailMessage) Version() int {
-	if m.version > 0 {
-		return m.version
-	}
-
-	return 1
-}
-
-func (m *EmailMessage) SetVersion(v int) (int, error) {
-	// Valid Version?
-	if v <= 0 { // NO
-		return 0, errors.New("[LicenseCreateMessage] Invalid Message Version")
-	}
-
-	// Current State
-	current := m.version
-
-	// New State
-	m.version = v
-	return current, nil
+	return m.QueueMessage.IsValid() && (m.template != "") && (m.to != "")
 }
 
 func (m *EmailMessage) Template() string {
@@ -77,15 +57,15 @@ func (m *EmailMessage) SetTemplate(t string) (string, error) {
 	return current, nil
 }
 
-func (m *EmailMessage) Language() string {
-	if m.language == "" {
+func (m *EmailMessage) Locale() string {
+	if m.locale == "" {
 		return "en_US"
 	}
 
-	return m.language
+	return m.locale
 }
 
-func (m *EmailMessage) SetLanguage(l string) (string, error) {
+func (m *EmailMessage) SetLocale(l string) (string, error) {
 	// Is Template Name Empty?
 	l = strings.TrimSpace(l)
 
@@ -93,10 +73,10 @@ func (m *EmailMessage) SetLanguage(l string) (string, error) {
 	l = strings.ToLower(l)
 
 	// Current State
-	current := m.language
+	current := m.locale
 
 	// New State
-	m.language = l
+	m.locale = l
 	return current, nil
 }
 
@@ -183,58 +163,6 @@ func (m *EmailMessage) SetBCC(bcc string) (string, error) {
 	return current, nil
 }
 
-func (m *EmailMessage) GetParameters() *map[string]interface{} {
-	return m.params
-}
-
-func (m *EmailMessage) HasParameter(n string) bool {
-	_, ok := (*m.params)[n]
-	return ok
-}
-
-func (m *EmailMessage) Parameter(n string) interface{} {
-	if m.params == nil {
-		return ""
-	}
-
-	value, ok := (*m.params)[n]
-	if ok {
-		return value
-	}
-	return ""
-}
-
-func (m *EmailMessage) SetParameter(n string, v string) error {
-	// Do we already have a Parameters Map?
-	if m.params == nil { // NO: Create One
-		d := make(map[string]interface{})
-		m.params = &d
-	}
-
-	// New State
-	(*m.params)[n] = v
-	return nil
-}
-
-func (m *EmailMessage) SetIntParameter(n string, v int) error {
-	return m.SetParameter(n, strconv.Itoa(v))
-}
-
-func (m *EmailMessage) UnsetParameter(n string) (interface{}, error) {
-	if m.params == nil {
-		return "", nil
-	}
-
-	// Do we have a Current Value?
-	current, ok := (*m.params)[n]
-	if ok { // YES: Delete It
-		delete(*m.params, n)
-	}
-	// ELSE: No - Just Ignore Request
-
-	return current, nil
-}
-
 func (m *EmailMessage) GetHeaders() *map[string]string {
 	return m.headers
 }
@@ -293,41 +221,98 @@ func (m EmailMessage) MarshalJSON() ([]byte, error) {
 		return nil, errors.New("[EmailMessage] Message is Invalid")
 	}
 
-	return json.Marshal(&struct {
-		Version  int                     `json:"version"`
-		Template string                  `json:"template"`
-		Language string                  `json:"locale"`
-		To       string                  `json:"to"`
-		From     string                  `json:"from,omitempty"`
-		CC       string                  `json:"cc,omitempty"`
-		BCC      string                  `json:"bcc,omitempty"`
-		Params   *map[string]interface{} `json:"params,omitempty"`
-		Headers  *map[string]string      `json:"headers,omitempty"`
+	// Is Message Creation Date Set?
+	if m.created == "" { // NO: Use Current Time
+		m.created = shared.UTCTimeStamp()
+	}
+
+	// QUEUE Counter and Settings //
+	queue := &struct {
+		RequeueCount int    `json:"count,omitempty"`
+		ErrorCode    int    `json:"errorcode,omitempty"`
+		ErrorTime    string `json:"errortime,omitempty"`
+		ErrorMessage string `json:"errormsg,omitempty"`
+	}{}
+
+	// Has the Message been Requeued?
+	if m.requeueCount > 0 { // YES
+		queue.RequeueCount = m.requeueCount
+	}
+
+	// Is this an Error Message?
+	if m.errorCode > 0 { // YES
+		queue.ErrorCode = m.errorCode
+		queue.ErrorTime = m.errorTime
+		queue.ErrorMessage = m.errorMessage
+	}
+
+	// Email Settings //
+	email := &struct {
+		Template string             `json:"template"`
+		Locale   string             `json:"locale"`
+		To       string             `json:"to"`
+		From     string             `json:"from,omitempty"`
+		CC       string             `json:"cc,omitempty"`
+		BCC      string             `json:"bcc,omitempty"`
+		Headers  *map[string]string `json:"headers,omitempty"`
 	}{
-		Version:  m.Version(),
 		Template: m.template,
-		Language: m.Language(),
+		Locale:   m.Locale(),
 		To:       m.to,
 		From:     m.from,
 		CC:       m.cc,
 		BCC:      m.bcc,
-		Params:   m.params,
 		Headers:  m.headers,
-	})
+	}
+
+	// Complete JSON Message //
+	output := &struct {
+		Version int                     `json:"version"`
+		ID      string                  `json:"id"`
+		Type    string                  `json:"type"`
+		SubType string                  `json:"subtype,omitempty"`
+		Params  *map[string]interface{} `json:"data,omitempty"`
+		Created string                  `json:"created"`
+		Queue   interface{}             `json:"queue,omitempty"`
+		Email   interface{}             `json:"email"`
+	}{
+		Version: m.version,
+		ID:      m.id,
+		Type:    m.mtype,
+		SubType: m.msubtype,
+		Params:  m.params,
+		Created: m.created,
+		Queue:   queue,
+		Email:   email,
+	}
+
+	return json.Marshal(output)
 }
 
 // UnmarshalJSON implements json.Unmarshal
 func (m *EmailMessage) UnmarshalJSON(b []byte) error {
 	me := &struct {
-		Version  int                     `json:"version"`
-		Template string                  `json:"template"`
-		Language string                  `json:"locale"`
-		To       string                  `json:"to"`
-		From     string                  `json:"from,omitempty"`
-		CC       string                  `json:"cc,omitempty"`
-		BCC      string                  `json:"bcc,omitempty"`
-		Params   *map[string]interface{} `json:"params,omitempty"`
-		Headers  *map[string]string      `json:"headers,omitempty"`
+		Version int                     `json:"version"`
+		ID      string                  `json:"id"`
+		Type    string                  `json:"type"`
+		SubType string                  `json:"subtype,omitempty"`
+		Params  *map[string]interface{} `json:"params,omitempty"`
+		Created string                  `json:"created"`
+		Queue   *struct {
+			RequeueCount int    `json:"count,omitempty"`
+			ErrorCode    int    `json:"errorcode,omitempty"`
+			ErrorTime    string `json:"errortime,omitempty"`
+			ErrorMessage string `json:"errormsg,omitempty"`
+		} `json:"errormsg,omitempty"`
+		Email *struct {
+			Template string             `json:"template"`
+			Locale   string             `json:"locale"`
+			To       string             `json:"to"`
+			From     string             `json:"from,omitempty"`
+			CC       string             `json:"cc,omitempty"`
+			BCC      string             `json:"bcc,omitempty"`
+			Headers  *map[string]string `json:"headers,omitempty"`
+		} `json:"email"`
 	}{}
 
 	err := json.Unmarshal(b, &me)
@@ -335,14 +320,34 @@ func (m *EmailMessage) UnmarshalJSON(b []byte) error {
 		return err
 	}
 
+	// Basic Message Information
 	m.version = me.Version
-	m.template = me.Template
-	m.language = me.Language
-	m.to = me.To
-	m.from = me.From
-	m.cc = me.CC
-	m.bcc = me.BCC
+	m.id = me.ID
+	m.mtype = me.Type
+	m.msubtype = me.Type
 	m.params = me.Params
-	m.headers = me.Headers
+	m.created = me.Created
+
+	// QUEUE Message Control Information //
+	if me.Queue != nil {
+		m.requeueCount = me.Queue.RequeueCount
+
+		// Has Error Message?
+		if me.Queue.ErrorCode > 0 { // YES
+			m.errorCode = me.Queue.ErrorCode
+			m.errorTime = me.Queue.ErrorTime
+			m.errorMessage = me.Queue.ErrorMessage
+		}
+	}
+
+	// EMAIL Message Parameters //
+	m.template = me.Email.Template
+	m.locale = me.Email.Locale
+	m.to = me.Email.To
+	m.from = me.Email.From
+	m.cc = me.Email.CC
+	m.bcc = me.Email.BCC
+	m.headers = me.Email.Headers
+
 	return nil
 }
