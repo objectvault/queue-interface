@@ -1,4 +1,8 @@
 github.com/gofrs/uuid v4.2.0+incompatible h1:yyYWMnhkhrKwwr8gAOcOCYxOOscHgDS9yZgBrnJfGa0=
 github.com/gofrs/uuid v4.2.0+incompatible/go.mod h1:b2aQJv3Z4Fp6yNu3cdSllBxTCLRxnplIgP/c0N/04lM=
+github.com/objectvault/common v0.0.1 h1:pc2stnB0AYyJ+KoQvGSqmh8b/5XbeSEP9qbxBUwmUZA=
+github.com/objectvault/common v0.0.1/go.mod h1:gd4F9OyEIm5Lz1N3emoXbEO+7ggKNkXrNG7AYv3KFUE=
+github.com/objectvault/common v0.0.2 h1:NYJzf2KI5fs7LEQ3l4a/ZMQkmEkitGctgaOdOdIYIL8=
+github.com/objectvault/common v0.0.2/go.mod h1:gd4F9OyEIm5Lz1N3emoXbEO+7ggKNkXrNG7AYv3KFUE=
 github.com/streadway/amqp v1.0.0 h1:kuuDrUJFZL1QYL9hUNuCxNObNzB0bV/ZG5jV3RWAQgo=
 github.com/streadway/amqp v1.0.0/go.mod h1:AZpEONHx3DKn8O/DFsRAY58/XVQiIPMTMB1SddzLXVw=

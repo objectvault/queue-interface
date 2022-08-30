@@ -40,6 +40,27 @@ type Queues struct {
 	Mail       *Queue `json:"mail,omitempty"`       // Message Queue Configuration: Email
 }
 
+func ToJSONTimeStamp(t *time.Time) string {
+	if t == nil {
+		return ""
+	}
+
+	return t.Format(time.RFC3339)
+}
+
+func FromJSONTimeStamp(t string) *time.Time {
+	if t == "" {
+		return nil
+	}
+
+	timestamp, err := time.Parse(time.RFC3339, t)
+	if err == nil {
+		return nil
+	}
+
+	return &timestamp
+}
+
 // UTCTimeStamp Return UTC Time Stamp String in RFC 3339
 func UTCTimeStamp() string {
 	return time.Now().UTC().Format(time.RFC3339)
