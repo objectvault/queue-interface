@@ -128,7 +128,7 @@ func (m *ActionMessage) GetProperty(path string) (interface{}, error) {
 func (o *ActionMessage) SetProperty(path string, v interface{}, force bool) error {
 	m, e := maps.Set(o.props, path, v, force)
 	if e == nil {
-		o.params = m
+		o.props = m
 	}
 	return e
 }
@@ -136,7 +136,7 @@ func (o *ActionMessage) SetProperty(path string, v interface{}, force bool) erro
 func (o *ActionMessage) ClearProperty(path string) error {
 	m, e := maps.Clear(o.props, path)
 	if e == nil {
-		o.params = m
+		o.props = m
 	}
 	return e
 }
