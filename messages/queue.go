@@ -29,7 +29,7 @@ type QueueMessage struct {
 
 func InitQueueMessage(m QueueMessage, id string, t string) error {
 	// Validate Message Type
-	id = strings.TrimSpace(t)
+	id = strings.TrimSpace(id)
 	if id == "" {
 		return errors.New("[QueueMessage] Missing Message ID")
 	}

@@ -4,5 +4,7 @@ github.com/objectvault/common v0.0.1 h1:pc2stnB0AYyJ+KoQvGSqmh8b/5XbeSEP9qbxBUwm
 github.com/objectvault/common v0.0.1/go.mod h1:gd4F9OyEIm5Lz1N3emoXbEO+7ggKNkXrNG7AYv3KFUE=
 github.com/objectvault/common v0.0.2 h1:NYJzf2KI5fs7LEQ3l4a/ZMQkmEkitGctgaOdOdIYIL8=
 github.com/objectvault/common v0.0.2/go.mod h1:gd4F9OyEIm5Lz1N3emoXbEO+7ggKNkXrNG7AYv3KFUE=
+github.com/objectvault/common v0.0.3 h1:pLVo/pzjTmsLs/VExDAZiXFI+wZ6nCWTK2eWEwU8v/M=
+github.com/objectvault/common v0.0.3/go.mod h1:gd4F9OyEIm5Lz1N3emoXbEO+7ggKNkXrNG7AYv3KFUE=
 github.com/streadway/amqp v1.0.0 h1:kuuDrUJFZL1QYL9hUNuCxNObNzB0bV/ZG5jV3RWAQgo=
 github.com/streadway/amqp v1.0.0/go.mod h1:AZpEONHx3DKn8O/DFsRAY58/XVQiIPMTMB1SddzLXVw=

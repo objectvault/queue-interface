@@ -47,7 +47,7 @@ func NewQueueAction(t string) (*ActionMessage, error) {
 	// Create GUID (V4 see https://www.sohamkamani.com/uuid-versions-explained/)
 	uid, err := uuid.NewV4()
 	if err != nil {
-		return nil, errors.New(fmt.Sprintf("Failed to Generate Action Message ID [%v]", err))
+		return nil, fmt.Errorf("[ActionMessage] Failed to Generate Action Message ID [%v]", err)
 	}
 
 	return NewQueueActionWithGUID(uid.String(), t)
@@ -60,6 +60,8 @@ func InitQueueAction(a ActionMessage, guid string, t string) error {
 		return errors.New("[ActionMessage] Missing Message Type")
 	}
 
+	// Set Default Version
+	a.version = 1
 	return InitQueueMessage(a.QueueMessage, guid, "action:"+t)
 }
 
@@ -90,17 +92,20 @@ func (m *ActionMessage) GetParameter(path string) (interface{}, error) {
 	return maps.Get(m.params, path)
 }
 
-func (m *ActionMessage) SetParameter(path string, v interface{}, force bool) error {
-	// Is Value NIL?
-	if v == nil { // YES: Remove Parameter
-		return m.ClearParameter(path)
+func (o *ActionMessage) SetParameter(path string, v interface{}, force bool) error {
+	m, e := maps.Set(o.params, path, v, force)
+	if e == nil {
+		o.params = m
 	}
-
-	return maps.Set(m.params, path, v, force)
+	return e
 }
 
-func (m *ActionMessage) ClearParameter(path string) error {
-	return maps.Clear(m.props, path)
+func (o *ActionMessage) ClearParameter(path string) error {
+	m, e := maps.Clear(o.params, path)
+	if e == nil {
+		o.params = m
+	}
+	return e
 }
 
 func (m *ActionMessage) GetParameters() map[string]interface{} {
@@ -108,7 +113,6 @@ func (m *ActionMessage) GetParameters() map[string]interface{} {
 }
 
 func (m *ActionMessage) SetParameters(p map[string]interface{}) error {
-	// New State
 	m.params = p
 	return nil
 }
@@ -121,17 +125,20 @@ func (m *ActionMessage) GetProperty(path string) (interface{}, error) {
 	return maps.Get(m.props, path)
 }
 
-func (m *ActionMessage) SetProperty(path string, v interface{}, force bool) error {
-	// Is Value NIL?
-	if v == nil { // YES: Remove Property
-		return m.ClearProperty(path)
+func (o *ActionMessage) SetProperty(path string, v interface{}, force bool) error {
+	m, e := maps.Set(o.props, path, v, force)
+	if e == nil {
+		o.params = m
 	}
-
-	return maps.Set(m.params, path, v, force)
+	return e
 }
 
-func (m *ActionMessage) ClearProperty(path string) error {
-	return maps.Clear(m.props, path)
+func (o *ActionMessage) ClearProperty(path string) error {
+	m, e := maps.Clear(o.props, path)
+	if e == nil {
+		o.params = m
+	}
+	return e
 }
 
 func (m *ActionMessage) GetProperties() map[string]interface{} {
@@ -139,7 +146,6 @@ func (m *ActionMessage) GetProperties() map[string]interface{} {
 }
 
 func (m *ActionMessage) SetProperties(p map[string]interface{}) error {
-	// New State
 	m.props = p
 	return nil
 }

@@ -40,7 +40,7 @@ func NewInviteMessage(ot string, code string) (*InviteMessage, error) {
 	// Create GUID (V4 see https://www.sohamkamani.com/uuid-versions-explained/)
 	uid, err := uuid.NewV4()
 	if err != nil {
-		return nil, errors.New(fmt.Sprintf("[InviteMessage] Failed to Generate Action Message ID [%v]", err))
+		return nil, fmt.Errorf("[InviteMessage] Failed to Generate Action Message ID [%v]", err)
 	}
 
 	return NewInviteMessageWithGUID(uid.String(), ot, code)

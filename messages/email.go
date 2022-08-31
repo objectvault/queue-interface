@@ -39,7 +39,7 @@ func NewEmailMessage(st string, template string) (*EmailMessage, error) {
 	// Create GUID (V4 see https://www.sohamkamani.com/uuid-versions-explained/)
 	uid, err := uuid.NewV4()
 	if err != nil {
-		return nil, errors.New(fmt.Sprintf("[EmailMessage] Failed to Generate Action Message ID [%v]", err))
+		return nil, fmt.Errorf("[EmailMessage] Failed to Generate Action Message ID [%v]", err)
 	}
 
 	return NewEmailMessageWithGUID(uid.String(), st, template)
