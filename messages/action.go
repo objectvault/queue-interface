@@ -32,15 +32,15 @@ type ActionMessage struct {
 }
 
 func NewQueueActionWithGUID(guid string, t string) (*ActionMessage, error) {
-	a := ActionMessage{}
+	a := &ActionMessage{}
 
 	// Initialize Message
-	err := InitQueueMessage(a.QueueMessage, guid, t)
+	err := InitQueueAction(a, guid, t)
 	if err != nil {
 		return nil, err
 	}
 
-	return &a, nil
+	return a, nil
 }
 
 func NewQueueAction(t string) (*ActionMessage, error) {
@@ -53,7 +53,7 @@ func NewQueueAction(t string) (*ActionMessage, error) {
 	return NewQueueActionWithGUID(uid.String(), t)
 }
 
-func InitQueueAction(a ActionMessage, guid string, t string) error {
+func InitQueueAction(a *ActionMessage, guid string, t string) error {
 	// Validate Message Type
 	t = strings.TrimSpace(t)
 	if t == "" {
@@ -62,7 +62,7 @@ func InitQueueAction(a ActionMessage, guid string, t string) error {
 
 	// Set Default Version
 	a.version = 1
-	return InitQueueMessage(a.QueueMessage, guid, "action:"+t)
+	return InitQueueMessage(&(a.QueueMessage), guid, "action:"+t)
 }
 
 func (m *ActionMessage) Version() int {

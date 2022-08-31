@@ -27,7 +27,7 @@ type QueueMessage struct {
 	errorMessage string     // Error Message
 }
 
-func InitQueueMessage(m QueueMessage, id string, t string) error {
+func InitQueueMessage(m *QueueMessage, id string, t string) error {
 	// Validate Message Type
 	id = strings.TrimSpace(id)
 	if id == "" {

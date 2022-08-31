@@ -25,14 +25,14 @@ type EmailMessage struct {
 }
 
 func NewEmailMessageWithGUID(guid string, st string, template string) (*EmailMessage, error) {
-	m := EmailMessage{}
+	m := &EmailMessage{}
 	err := InitEmailMessage(m, guid, st, template)
 
 	if err != nil {
 		return nil, err
 	}
 
-	return &m, nil
+	return m, nil
 }
 
 func NewEmailMessage(st string, template string) (*EmailMessage, error) {
@@ -45,7 +45,7 @@ func NewEmailMessage(st string, template string) (*EmailMessage, error) {
 	return NewEmailMessageWithGUID(uid.String(), st, template)
 }
 
-func InitEmailMessage(m EmailMessage, guid string, et string, template string) error {
+func InitEmailMessage(m *EmailMessage, guid string, et string, template string) error {
 	et = strings.TrimSpace(et)
 	template = strings.TrimSpace(template)
 
@@ -61,7 +61,7 @@ func InitEmailMessage(m EmailMessage, guid string, et string, template string) e
 	}
 
 	// Initialize Action Message
-	err := InitQueueAction(m.ActionMessage, guid, et)
+	err := InitQueueAction(&(m.ActionMessage), guid, et)
 	if err != nil {
 		return err
 	}

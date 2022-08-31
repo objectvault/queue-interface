@@ -26,14 +26,14 @@ type InviteMessage struct {
 }
 
 func NewInviteMessageWithGUID(guid string, ot string, code string) (*InviteMessage, error) {
-	m := InviteMessage{}
+	m := &InviteMessage{}
 	err := InitInviteMessage(m, guid, ot, code)
 
 	if err != nil {
 		return nil, err
 	}
 
-	return &m, nil
+	return m, nil
 }
 
 func NewInviteMessage(ot string, code string) (*InviteMessage, error) {
@@ -46,14 +46,14 @@ func NewInviteMessage(ot string, code string) (*InviteMessage, error) {
 	return NewInviteMessageWithGUID(uid.String(), ot, code)
 }
 
-func InitInviteMessage(m InviteMessage, guid string, ot string, code string) error {
+func InitInviteMessage(m *InviteMessage, guid string, ot string, code string) error {
 	ot = strings.TrimSpace(ot)
 	if ot == "" {
 		return errors.New("[InviteMessage] Invitation Object Type Required")
 	}
 
 	// Initialize Email Message
-	err := InitEmailMessage(m.EmailMessage, guid, "invite:"+strings.ToLower(ot), "")
+	err := InitEmailMessage(&(m.EmailMessage), guid, "invite:"+strings.ToLower(ot), "")
 	if err != nil {
 		return err
 	}
