@@ -10,7 +10,7 @@ package messages
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-// cSpell:ignore gofrs, objectname
+// cSpell:ignore gofrs, objectname, storename
 import (
 	"errors"
 	"fmt"
@@ -168,6 +168,29 @@ func (m *InviteMessage) SetObjectName(name string) error {
 	}
 
 	e := m.SetProperty("objectname", name, true)
+	if e != nil {
+		return e
+	}
+	return nil
+}
+
+func (m *InviteMessage) StoreName() string {
+	n, e := m.GetProperty("storename")
+	if e != nil || n == nil {
+		return ""
+	}
+
+	return n.(string)
+}
+
+func (m *InviteMessage) SetStoreName(name string) error {
+	// Is Name Empty?
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return errors.New("[InviteMessage] Object Name is Required")
+	}
+
+	e := m.SetProperty("storename", name, true)
 	if e != nil {
 		return e
 	}
