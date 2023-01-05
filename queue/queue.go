@@ -1,3 +1,4 @@
+// cSpell:ignore vhost
 package queue
 
 /*
@@ -130,7 +131,7 @@ func (c *AMQPServerConnection) queueURI(con *shared.AMQPConnection) (string, err
 		}
 	} else {
 		if vhost != "" {
-			fmt.Fprintf(&builder, "amqp://%s/%s", auth, connection, vhost)
+			fmt.Fprintf(&builder, "amqp://%s/%s", connection, vhost)
 		} else {
 			fmt.Fprintf(&builder, "amqp://%s", connection)
 		}
