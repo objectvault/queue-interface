@@ -12,131 +12,215 @@ package messages
 
 // cSpell:ignore mtype
 import (
+	"encoding/json"
 	"errors"
 	"strings"
 	"time"
+
+	"github.com/objectvault/common/maps"
 )
 
+// Current Message Processing Status
+type QueueMessageStatus struct {
+	errorCode        int             // [REQUIRED] Error Code (0 = OK)
+	errorMessage     string          // [OPTIONAL] Error Message Text
+	errorMessageI18N string          // [OPTIONAL] Error Message I18N Code
+	extras           maps.MapWrapper // [OPTIONAL] Optional Information
+}
+
+// Constructor
+func NewQueueMessageStatus() *QueueMessageStatus {
+	o := &QueueMessageStatus{
+		errorCode: 0,
+	}
+
+	return o
+}
+
+func (o *QueueMessageStatus) InError() bool {
+	return (o.errorCode != 0)
+}
+
+func (o *QueueMessageStatus) ErrorCode() int {
+	return o.errorCode
+}
+
+func (o *QueueMessageStatus) ErrorMessage() string {
+	return o.errorMessage
+}
+
+func (o *QueueMessageStatus) SetError(code int, en string, i18n string) {
+	o.errorCode = code
+	o.errorMessage = strings.TrimSpace(en)
+	o.errorMessageI18N = strings.TrimSpace(i18n)
+}
+
+func (o *QueueMessageStatus) Extras() map[string]interface{} {
+	return o.extras.Map()
+}
+
+func (o *QueueMessageStatus) MarshalJSON() ([]byte, error) {
+	// Convert to JSON
+	return json.Marshal(&struct {
+		ErrorCode        int         `json:"error_code"`
+		ErrorMessage     string      `json:"error_message,omitempty"`
+		ErrorMessageI18N string      `json:"error_message_i18n,omitempty"`
+		Extras           interface{} `json:"extras,omitempty"`
+	}{
+		ErrorCode:        o.errorCode,
+		ErrorMessage:     o.errorMessage,
+		ErrorMessageI18N: o.errorMessageI18N,
+		Extras:           o.extras.Map(),
+	})
+}
+
+type QueueMessageHeader struct {
+	version int                 // [REQUIRED] Message Version
+	id      string              // [REQUIRED] Message ID (Preferably a GUID)
+	parent  string              // [OPTIONAL] Associated Parent Message ID
+	props   maps.MapWrapper     // [OPTIONAL] Message Processing Properties
+	status  *QueueMessageStatus // [OPTIONAL] Message Processing Status
+	created *time.Time          // [OPTIONAL] Message Creation Date
+}
+
+// Constructor
+func NewQueueMessageHeader(id string, parent string) *QueueMessageHeader {
+	o := &QueueMessageHeader{
+		version: 1,
+	}
+
+	o.SetID(id)
+	o.SetParent(parent)
+
+	return o
+}
+
+func (o *QueueMessageHeader) IsValid() bool {
+	return (o.version > 0) && (o.id != "")
+}
+
+func (o *QueueMessageHeader) Version() int {
+	return o.version
+}
+
+func (o *QueueMessageHeader) ID() string {
+	return o.id
+}
+
+func (o *QueueMessageHeader) SetID(id string) {
+	o.id = strings.TrimSpace(id)
+	if o.id != "" {
+		o.id = strings.ToLower(o.id)
+	}
+}
+
+func (o *QueueMessageHeader) Parent() string {
+	return o.parent
+}
+
+func (o *QueueMessageHeader) SetParent(id string) {
+	o.parent = strings.TrimSpace(id)
+	if o.parent != "" {
+		o.parent = strings.ToLower(o.parent)
+	}
+}
+
+func (o *QueueMessageHeader) SetProperties(m map[string]interface{}) {
+	o.props = *maps.NewMapWrapper(m)
+}
+
+func (o *QueueMessageHeader) Status() *QueueMessageStatus {
+	return o.status
+}
+
+func (o *QueueMessageHeader) Created() time.Time {
+	if o.created == nil {
+		now := time.Now().UTC()
+		o.created = &now
+	}
+
+	return *o.created
+}
+
+func (o *QueueMessageHeader) MarshalJSON() ([]byte, error) {
+	if !o.IsValid() {
+		return nil, errors.New("[QueueMessageHeader] Is not valid")
+	}
+
+	// Convert to JSON
+	j := &struct {
+		Version int         `json:"version"`
+		ID      string      `json:"id"`
+		Parent  string      `json:"parent,omitempty"`
+		Props   interface{} `json:"props,omitempty"`
+		Status  interface{} `json:"status,omitempty"`
+		Created time.Time   `json:"created"`
+	}{
+		Version: o.version,
+		ID:      o.id,
+		Parent:  o.parent,
+		Created: o.Created(),
+	}
+
+	// Properties Set?
+	if !o.props.IsEmpty() {
+		j.Props = o.props.Map()
+	}
+
+	// Status Set?
+	if o.status != nil {
+		j.Status = o.status
+	}
+
+	// Convert Structure to JSON
+	return json.Marshal(j)
+}
+
 type QueueMessage struct {
-	id           string     // [REQUIRED] Message ID (Preferably a GUID)
-	mtype        string     // [REQUIRED] Message Type
-	created      *time.Time // [REQUIRED] Original Message Creation TimeStamp
-	requeueCount int        // Number of Times Message Requeued
-	errorCode    int        // Error Code : 0 OK
-	errorTime    *time.Time // Error Time Stamp
-	errorMessage string     // Error Message
+	header *QueueMessageHeader // [REQUIRED] Message Header
+	body   interface{}         // [REQUIRED] Message Content
 }
 
-func InitQueueMessage(m *QueueMessage, id string, t string) error {
-	// Validate Message Type
-	id = strings.TrimSpace(id)
-	if id == "" {
-		return errors.New("[QueueMessage] Missing Message ID")
+func NewQueueMessage(id string, message interface{}) *QueueMessage {
+	o := &QueueMessage{
+		header: NewQueueMessageHeader(id, ""),
+		body:   message,
 	}
 
-	// Validate Message Type
-	t = strings.TrimSpace(t)
-	if t == "" {
-		return errors.New("[QueueMessage] Missing Message Type")
+	return o
+}
+
+func (o *QueueMessage) IsValid() bool {
+	return (o.header != nil) && o.header.IsValid() && (o.body != nil)
+}
+
+func (o *QueueMessage) Header() *QueueMessageHeader {
+	if o.header == nil {
+		o.header = &QueueMessageHeader{}
 	}
 
-	m.id = strings.ToLower(id)
-	m.mtype = strings.ToLower(t)
-	// m.created Should be Set Closer to When Message is Queued
-	return nil
+	return o.header
 }
 
-func (m *QueueMessage) IsValid() bool {
-	return (m.id != "") && (m.mtype != "")
+func (o *QueueMessage) Message() interface{} {
+	return o.body
 }
 
-func (m *QueueMessage) ID() string {
-	return m.id
+func (o *QueueMessage) SetMessage(message interface{}) {
+	o.body = message
 }
 
-func (m *QueueMessage) SetID(id string) error {
-	// Is ID Empty?
-	id = strings.TrimSpace(id)
-	if id == "" { // YES: Error
-		return errors.New("[QueueMessage] Request ID is Required")
+func (o *QueueMessage) MarshalJSON() ([]byte, error) {
+	if !o.IsValid() {
+		return nil, errors.New("[QueueMessage] Is not valid")
 	}
 
-	// IDs are always lower case
-	id = strings.ToLower(id)
-
-	// New State
-	m.id = id
-	return nil
-}
-
-func (m *QueueMessage) Type() string {
-	return m.mtype
-}
-
-func (m *QueueMessage) SetType(t string) error {
-	// Is ID Empty?
-	t = strings.TrimSpace(t)
-	if t == "" { // YES: Error
-		return errors.New("[QueueAction] Request Type is Required")
-	}
-
-	// Message Types are always lower case
-	t = strings.ToLower(t)
-
-	// New State
-	m.mtype = t
-	return nil
-}
-
-func (m *QueueMessage) Created() *time.Time {
-	return m.created
-}
-
-func (m *QueueMessage) RequeueCount() int {
-	return m.requeueCount
-}
-
-func (m *QueueMessage) ResetCount() int {
-	current := m.requeueCount
-	m.requeueCount = 0
-	return current
-}
-
-func (m *QueueMessage) Requeue() int {
-	m.requeueCount++
-	return m.requeueCount
-}
-
-func (m *QueueMessage) SetError(c int, msg string) error {
-	// Valid Error Code?
-	if c > 0 { // NO
-		return errors.New("[QueueMessage] Invalid Error Code")
-	}
-
-	// Valid Error Message?
-	if msg == "" { // NO
-		return errors.New("[QueueMessage] Missing Error Message")
-	}
-
-	m.errorCode = c
-	m.errorMessage = msg
-	t := time.Now().UTC()
-	m.errorTime = &t
-	return nil
-}
-
-func (m *QueueMessage) ErrorCode() int {
-	return m.errorCode
-}
-
-func (m *QueueMessage) ErrorMessage() string {
-	return m.errorMessage
-}
-
-func (m *QueueMessage) ErrorTime() *time.Time {
-	return m.errorTime
-}
-
-func (m *QueueMessage) IsError() bool {
-	return (m.errorCode > 0)
+	// Convert to JSON
+	return json.Marshal(&struct {
+		Header  interface{} `json:"header"`
+		Message interface{} `json:"body"`
+	}{
+		Header:  o.header,
+		Message: o.body,
+	})
 }

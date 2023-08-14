@@ -10,40 +10,86 @@ package messages
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-// cSpell:ignore gofrs, mtype
+// cSpell:ignore gofrs, atype
 import (
 	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/gofrs/uuid"
 
 	"github.com/objectvault/common/maps"
-	"github.com/objectvault/queue-interface/shared"
 )
+
+type ActionMessageContent struct {
+	atype  string          // [REQUIRED] Action Type
+	params maps.MapWrapper // [OPTIONAL] Action Control Parameters
+	props  maps.MapWrapper // [OPTIONAL] Action Context Properties
+}
+
+func NewActionMessageContent(t string) *ActionMessageContent {
+	o := &ActionMessageContent{}
+	o.SetType(t)
+	return o
+}
+
+func (o *ActionMessageContent) IsValid() bool {
+	return (o.atype != "")
+}
+
+func (o *ActionMessageContent) Type() string {
+	return o.atype
+}
+
+func (o *ActionMessageContent) SetType(t string) {
+	o.atype = strings.TrimSpace(t)
+	if o.atype != "" {
+		o.atype = strings.ToLower(o.atype)
+	}
+}
+
+func (o *ActionMessageContent) SetParameters(m map[string]interface{}) {
+	o.params = *maps.NewMapWrapper(m)
+}
+
+func (o *ActionMessageContent) SetProperties(m map[string]interface{}) {
+	o.props = *maps.NewMapWrapper(m)
+}
+
+func (o *ActionMessageContent) MarshalJSON() ([]byte, error) {
+	if !o.IsValid() {
+		return nil, errors.New("[ActionMessageContent] Is not valid")
+	}
+
+	// JSON Structure
+	j := &struct {
+		Type   string      `json:"type"`
+		Params interface{} `json:"params,omitempty"`
+		Props  interface{} `json:"props,omitempty"`
+	}{
+		Type: o.atype,
+	}
+
+	// Parameters Set?
+	if !o.params.IsEmpty() {
+		j.Params = o.params.Map()
+	}
+
+	// Properties Set?
+	if !o.props.IsEmpty() {
+		j.Props = o.props.Map()
+	}
+
+	// Convert Structure to JSON
+	return json.Marshal(j)
+}
 
 type ActionMessage struct {
 	QueueMessage
-	version int                    // [REQUIRED] Action Format Version
-	params  map[string]interface{} // [OPTIONAL] Action Control Parameters
-	props   map[string]interface{} // [OPTIONAL] Action Context Properties
 }
 
-func NewQueueActionWithGUID(guid string, t string) (*ActionMessage, error) {
-	a := &ActionMessage{}
-
-	// Initialize Message
-	err := InitQueueAction(a, guid, t)
-	if err != nil {
-		return nil, err
-	}
-
-	return a, nil
-}
-
-func NewQueueAction(t string) (*ActionMessage, error) {
+func NewQueueActionMessage(t string) (*ActionMessage, error) {
 	// Create GUID (V4 see https://www.sohamkamani.com/uuid-versions-explained/)
 	uid, err := uuid.NewV4()
 	if err != nil {
@@ -53,199 +99,135 @@ func NewQueueAction(t string) (*ActionMessage, error) {
 	return NewQueueActionWithGUID(uid.String(), t)
 }
 
-func InitQueueAction(a *ActionMessage, guid string, t string) error {
-	// Validate Message Type
-	t = strings.TrimSpace(t)
-	if t == "" {
-		return errors.New("[ActionMessage] Missing Message Type")
-	}
+func NewQueueActionWithGUID(guid string, t string) (*ActionMessage, error) {
+	o := &ActionMessage{}
 
-	// Set Default Version
-	a.version = 1
-	return InitQueueMessage(&(a.QueueMessage), guid, "action:"+t)
-}
-
-func (m *ActionMessage) Version() int {
-	if m.version > 0 {
-		return m.version
-	}
-
-	return 1
-}
-
-func (m *ActionMessage) SetVersion(v int) error {
-	// Valid Version?
-	if v <= 0 { // NO
-		return errors.New("[ActionMessage] Invalid Message Version")
-	}
-
-	// New State
-	m.version = v
-	return nil
-}
-
-func (m *ActionMessage) HasParameter(path string) bool {
-	return maps.Has(m.params, path)
-}
-
-func (m *ActionMessage) GetParameter(path string) (interface{}, error) {
-	return maps.Get(m.params, path)
-}
-
-func (o *ActionMessage) SetParameter(path string, v interface{}, force bool) error {
-	m, e := maps.Set(o.params, path, v, force)
-	if e == nil {
-		o.params = m
-	}
-	return e
-}
-
-func (o *ActionMessage) ClearParameter(path string) error {
-	m, e := maps.Clear(o.params, path)
-	if e == nil {
-		o.params = m
-	}
-	return e
-}
-
-func (m *ActionMessage) GetParameters() map[string]interface{} {
-	return m.params
-}
-
-func (m *ActionMessage) SetParameters(p map[string]interface{}) error {
-	m.params = p
-	return nil
-}
-
-func (m *ActionMessage) HasProperty(path string) bool {
-	return maps.Has(m.props, path)
-}
-
-func (m *ActionMessage) GetProperty(path string) (interface{}, error) {
-	return maps.Get(m.props, path)
-}
-
-func (o *ActionMessage) SetProperty(path string, v interface{}, force bool) error {
-	m, e := maps.Set(o.props, path, v, force)
-	if e == nil {
-		o.props = m
-	}
-	return e
-}
-
-func (o *ActionMessage) ClearProperty(path string) error {
-	m, e := maps.Clear(o.props, path)
-	if e == nil {
-		o.props = m
-	}
-	return e
-}
-
-func (m *ActionMessage) GetProperties() map[string]interface{} {
-	return m.props
-}
-
-func (m *ActionMessage) SetProperties(p map[string]interface{}) error {
-	m.props = p
-	return nil
-}
-
-// MarshalJSON implements json.Marshal
-func (m ActionMessage) MarshalJSON() ([]byte, error) {
-	// Is Message Valid?
-	if !m.IsValid() { // NO
-		return nil, errors.New("[ActionMessage] Message is Invalid")
-	}
-
-	// Is Message Creation Date Set?
-	if m.created == nil { // NO: Use Current Time
-		t := time.Now().UTC()
-		m.created = &t
-	}
-
-	// QUEUE Counter and Settings //
-	queue := &struct {
-		RequeueCount int    `json:"count,omitempty"`
-		ErrorCode    int    `json:"errorcode,omitempty"`
-		ErrorTime    string `json:"errortime,omitempty"`
-		ErrorMessage string `json:"errormsg,omitempty"`
-	}{}
-
-	// Has the Message been Requeued?
-	if m.requeueCount > 0 { // YES
-		queue.RequeueCount = m.requeueCount
-	}
-
-	// Is this an Error Message?
-	if m.errorCode > 0 { // YES
-		queue.ErrorCode = m.errorCode
-		queue.ErrorTime = shared.ToJSONTimeStamp(m.errorTime)
-		queue.ErrorMessage = m.errorMessage
-	}
-
-	// Complete JSON Message //
-	output := &struct {
-		Version int                    `json:"version"`
-		ID      string                 `json:"id"`
-		Type    string                 `json:"type"`
-		Params  map[string]interface{} `json:"params,omitempty"`
-		Props   map[string]interface{} `json:"props,omitempty"`
-		Created string                 `json:"created"`
-		Queue   interface{}            `json:"queue,omitempty"`
-	}{
-		Version: m.version,
-		ID:      m.id,
-		Type:    m.mtype,
-		Params:  m.params,
-		Props:   m.props,
-		Created: shared.ToJSONTimeStamp(m.created),
-		Queue:   queue,
-	}
-
-	return json.Marshal(output)
-}
-
-// UnmarshalJSON implements json.Unmarshal
-func (m *ActionMessage) UnmarshalJSON(b []byte) error {
-	me := &struct {
-		Version int                    `json:"version"`
-		ID      string                 `json:"id"`
-		Type    string                 `json:"type"`
-		Params  map[string]interface{} `json:"params,omitempty"`
-		Props   map[string]interface{} `json:"props,omitempty"`
-		Created string                 `json:"created"`
-		Queue   *struct {
-			RequeueCount int    `json:"count,omitempty"`
-			ErrorCode    int    `json:"errorcode,omitempty"`
-			ErrorTime    string `json:"errortime,omitempty"`
-			ErrorMessage string `json:"errormsg,omitempty"`
-		} `json:"queue,omitempty"`
-	}{}
-
-	err := json.Unmarshal(b, &me)
+	// Initialize Action Message
+	err := InitQueueAction(o, guid, t)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	// Basic Message Information
-	m.version = me.Version
-	m.id = me.ID
-	m.mtype = me.Type
-	m.params = me.Params
-	m.props = me.Props
-	m.created = shared.FromJSONTimeStamp(me.Created)
+	return o, nil
+}
 
-	// QUEUE Message Control Information //
-	if me.Queue != nil {
-		m.requeueCount = me.Queue.RequeueCount
+func InitQueueAction(o *ActionMessage, guid string, t string) error {
+	// Initialize Header
+	o.header = NewQueueMessageHeader(guid, "")
 
-		// Has Error Message?
-		if me.Queue.ErrorCode > 0 { // YES
-			m.errorCode = me.Queue.ErrorCode
-			m.errorTime = shared.FromJSONTimeStamp(me.Queue.ErrorTime)
-			m.errorMessage = me.Queue.ErrorMessage
+	// Initialize Content
+	t = strings.TrimSpace(t)
+	if t != "" {
+		t = "action:" + t
+	}
+
+	o.QueueMessage.SetMessage(NewActionMessageContent(t))
+
+	return nil
+}
+
+func GetActionMessageContent(o *ActionMessage) *ActionMessageContent {
+	m := o.QueueMessage.Message()
+	if m != nil {
+		c, ok := m.(*ActionMessageContent)
+		if ok {
+			return c
 		}
 	}
 
 	return nil
+}
+
+func (o *ActionMessage) IsValid() bool {
+	if (o.header != nil) && o.header.IsValid() {
+		c := GetActionMessageContent(o)
+		if c != nil {
+			return c.IsValid()
+		}
+	}
+
+	return false
+}
+
+func (o *ActionMessage) Params() *maps.MapWrapper {
+	c := GetActionMessageContent(o)
+	if c != nil {
+		return &c.params
+	}
+
+	return nil
+}
+
+func (o *ActionMessage) SetParameters(m map[string]interface{}) error {
+	c := GetActionMessageContent(o)
+	if c != nil {
+		c.SetParameters(m)
+		return nil
+	}
+
+	return errors.New("[ActionMessage] Initialize Message before using")
+}
+
+func (o *ActionMessage) Props() *maps.MapWrapper {
+	c := GetActionMessageContent(o)
+	if c != nil {
+		return &c.props
+	}
+
+	return nil
+}
+
+func (o *ActionMessage) SetProperties(m map[string]interface{}) error {
+	c := GetActionMessageContent(o)
+	if c != nil {
+		c.SetProperties(m)
+		return nil
+	}
+
+	return errors.New("[ActionMessage] Initialize Message before using")
+}
+
+func (o *ActionMessage) SetParameter(path string, v interface{}) error {
+	p := o.Params()
+	if p != nil {
+		return p.Set(path, v, true)
+	}
+
+	return errors.New("[ActionMessage] Initialize Message before using")
+}
+
+func (o *ActionMessage) SetStringParameter(path string, s string, clear bool) error {
+	p := o.Params()
+	if p != nil {
+		if s == "" && clear {
+			return p.Clear(p)
+		}
+
+		return p.Set(path, s, true)
+	}
+
+	return errors.New("[ActionMessage] Initialize Message before using")
+}
+
+func (o *ActionMessage) SetProperty(path string, v interface{}) error {
+	p := o.Props()
+	if p != nil {
+		return p.Set(path, v, true)
+	}
+
+	return errors.New("[ActionMessage] Initialize Message before using")
+}
+
+func (o *ActionMessage) SetStringProperty(path string, s string, clear bool) error {
+	// Set Parameter
+	p := o.Props()
+	if p != nil {
+		if s == "" && clear {
+			return p.Clear(p)
+		}
+
+		return p.Set(path, s, true)
+	}
+
+	return errors.New("[ActionMessage] Initialize Message before using")
 }

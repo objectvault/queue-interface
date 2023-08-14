@@ -24,6 +24,16 @@ type EmailMessage struct {
 	ActionMessage // DERIVED FROM
 }
 
+func NewEmailMessage(st string, template string) (*EmailMessage, error) {
+	// Create GUID (V4 see https://www.sohamkamani.com/uuid-versions-explained/)
+	uid, err := uuid.NewV4()
+	if err != nil {
+		return nil, fmt.Errorf("[EmailMessage] Failed to Generate Action Message ID [%v]", err)
+	}
+
+	return NewEmailMessageWithGUID(uid.String(), st, template)
+}
+
 func NewEmailMessageWithGUID(guid string, st string, template string) (*EmailMessage, error) {
 	m := &EmailMessage{}
 	err := InitEmailMessage(m, guid, st, template)
@@ -33,16 +43,6 @@ func NewEmailMessageWithGUID(guid string, st string, template string) (*EmailMes
 	}
 
 	return m, nil
-}
-
-func NewEmailMessage(st string, template string) (*EmailMessage, error) {
-	// Create GUID (V4 see https://www.sohamkamani.com/uuid-versions-explained/)
-	uid, err := uuid.NewV4()
-	if err != nil {
-		return nil, fmt.Errorf("[EmailMessage] Failed to Generate Action Message ID [%v]", err)
-	}
-
-	return NewEmailMessageWithGUID(uid.String(), st, template)
 }
 
 func InitEmailMessage(m *EmailMessage, guid string, et string, template string) error {
@@ -56,7 +56,6 @@ func InitEmailMessage(m *EmailMessage, guid string, et string, template string) 
 
 		et = "email"
 	} else {
-		et = strings.ToLower(et)
 		et = "email:" + et
 	}
 
@@ -69,22 +68,26 @@ func InitEmailMessage(m *EmailMessage, guid string, et string, template string) 
 	// Save Template (Note: ALLOW template == "")
 	template = strings.TrimSpace(template)
 	if template != "" {
-		m.SetParameter("template", strings.ToLower(template), true)
+		m.SetTemplate(strings.ToLower(template))
 	}
 
 	return nil
 }
 
 func (m *EmailMessage) IsValid() bool {
-	return m.IsValid() && m.HasParameter("template") && m.HasParameter("to")
+	return m.IsValid() && (m.Template() != "") && (m.To() != "")
 }
 
 func (m *EmailMessage) Template() string {
-	t, e := m.GetParameter("template")
-	if e != nil {
-		return ""
+	p := m.Params()
+	if p != nil {
+		t, e := p.GetDefault("template", "")
+		if e == nil {
+			return t.(string)
+		}
 	}
-	return t.(string)
+
+	return ""
 }
 
 func (m *EmailMessage) SetTemplate(t string) error {
@@ -94,37 +97,35 @@ func (m *EmailMessage) SetTemplate(t string) error {
 		return errors.New("Email Template is Required")
 	}
 
-	// Set Parameter
-	return m.SetParameter("template", strings.ToLower(t), true)
+	return m.SetParameter("template", strings.ToLower(t))
 }
 
 func (m *EmailMessage) Locale() string {
-	l, e := m.GetParameter("locale")
-	if e != nil || l == nil {
-		return "en_us"
+	p := m.Params()
+	if p != nil {
+		l, e := p.GetDefault("locale", "en_us")
+		if e == nil {
+			return l.(string)
+		}
 	}
 
-	return l.(string)
+	return "en_us"
 }
 
 func (m *EmailMessage) SetLocale(l string) error {
-	// Is Locale Empty?
-	l = strings.TrimSpace(l)
-	if l == "" {
-		return m.ClearParameter("locale")
-	}
-
-	// Set Parameter
-	return m.SetParameter("locale", strings.ToLower(l), true)
+	return m.SetStringParameter("template", strings.ToLower(l), true)
 }
 
 func (m *EmailMessage) To() string {
-	to, e := m.GetParameter("to")
-	if e != nil {
-		return ""
+	p := m.Params()
+	if p != nil {
+		to, e := p.GetDefault("to", "")
+		if e == nil {
+			return to.(string)
+		}
 	}
 
-	return to.(string)
+	return ""
 }
 
 func (m *EmailMessage) SetTo(to string) error {
@@ -134,114 +135,107 @@ func (m *EmailMessage) SetTo(to string) error {
 		return errors.New("Email Destination is Required")
 	}
 
-	// Set Parameter
-	return m.SetParameter("to", strings.ToLower(to), true)
+	return m.SetParameter("to", strings.ToLower(to))
 }
 
 func (m *EmailMessage) From(d string) string {
-	f, e := m.GetParameter("from")
-	if e != nil || f == nil {
-		return d
+	p := m.Params()
+	if p != nil {
+		from, e := p.GetDefault("from", "")
+		if e == nil {
+			return from.(string)
+		}
 	}
 
-	return f.(string)
+	return ""
 }
 
 func (m *EmailMessage) SetFrom(from string) error {
-	// Is FROM Empty?
-	from = strings.TrimSpace(from)
-	if from == "" {
-		return m.ClearParameter("from")
-	}
-
-	// Set Parameter
-	return m.SetParameter("from", strings.ToLower(from), true)
+	return m.SetStringParameter("from", strings.ToLower(from), true)
 }
 
 func (m *EmailMessage) CC() string {
-	cc, e := m.GetParameter("cc")
-	if e != nil || cc == nil {
-		return ""
+	p := m.Params()
+	if p != nil {
+		cc, e := p.GetDefault("cc", "")
+		if e == nil {
+			return cc.(string)
+		}
 	}
 
-	return cc.(string)
+	return ""
 }
 
 func (m *EmailMessage) SetCC(cc string) error {
-	// Is CC Empty?
-	cc = strings.TrimSpace(cc)
-	if cc == "" {
-		return m.ClearParameter("cc")
-	}
-
-	// Set Parameter
-	return m.SetParameter("cc", strings.ToLower(cc), true)
+	return m.SetStringParameter("cc", strings.ToLower(cc), true)
 }
 
 func (m *EmailMessage) BCC() string {
-	bcc, e := m.GetParameter("bcc")
-	if e != nil || bcc == nil {
-		return ""
+	p := m.Params()
+	if p != nil {
+		bcc, e := p.GetDefault("bcc", "")
+		if e == nil {
+			return bcc.(string)
+		}
 	}
 
-	return bcc.(string)
+	return ""
 }
 
 func (m *EmailMessage) SetBCC(bcc string) error {
-	// Is BCC Empty?
-	bcc = strings.TrimSpace(bcc)
-	if bcc == "" {
-		return m.ClearParameter("bcc")
-	}
-
-	// Set Parameter
-	return m.SetParameter("bcc", strings.ToLower(bcc), true)
+	return m.SetStringParameter("bcc", strings.ToLower(bcc), true)
 }
 
 func (m *EmailMessage) GetHeaders() map[string]interface{} {
-	h, e := m.GetParameter("headers")
-	if e != nil || h == nil {
-		return nil
+	p := m.Params()
+	if p != nil {
+		h, e := p.Get("headers")
+		if e == nil && h != nil {
+			return h.(map[string]interface{})
+		}
 	}
 
-	return h.(map[string]interface{})
+	return nil
 }
 
 func (m *EmailMessage) HasHeader(n string) bool {
-	return m.HasParameter("headers." + strings.ToLower(n))
+	p := m.Params()
+	if p != nil {
+		return p.Has("headers." + strings.ToLower(n))
+	}
+
+	return false
 }
 
 func (m *EmailMessage) Header(n string) string {
-	h, e := m.GetParameter("headers." + strings.ToLower(n))
-	if e != nil || h == nil {
-		return ""
+	p := m.Params()
+	if p != nil {
+		h, e := p.GetDefault("headers."+strings.ToLower(n), "")
+		if e == nil {
+			return h.(string)
+		}
 	}
 
-	return h.(string)
+	return ""
 }
 
 func (m *EmailMessage) SetHeader(n string, v string) error {
-	return m.SetParameter("headers."+strings.ToLower(n), strings.TrimSpace(v), true)
+	return m.SetStringParameter("headers."+strings.ToLower(n), strings.TrimSpace(v), true)
 }
 
 func (m *EmailMessage) ClearHeader(n string) error {
-	e := m.ClearParameter("headers." + strings.ToLower(n))
-	if e != nil {
-		return e
-	}
-
-	h := m.GetHeaders()
-	if h != nil && len(h) == 0 {
-		return m.ClearHeaders()
+	p := m.Params()
+	if p != nil {
+		return p.Clear("headers." + strings.ToLower(n))
 	}
 
 	return nil
 }
 
 func (m *EmailMessage) ClearHeaders() error {
-	e := m.ClearParameter("headers")
-	if e != nil {
-		return e
+	p := m.Params()
+	if p != nil {
+		return p.Clear("headers")
 	}
 
 	return nil

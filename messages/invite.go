@@ -72,12 +72,15 @@ func (m *InviteMessage) IsValid() bool {
 }
 
 func (m *InviteMessage) Code() string {
-	code, e := m.GetProperty("code")
-	if e != nil || code == nil {
-		return ""
+	p := m.Params()
+	if p != nil {
+		code, e := p.GetDefault("code", "")
+		if e == nil {
+			return code.(string)
+		}
 	}
 
-	return code.(string)
+	return ""
 }
 
 func (m *InviteMessage) SetCode(code string) error {
@@ -87,17 +90,19 @@ func (m *InviteMessage) SetCode(code string) error {
 		return errors.New("[InviteMessage] Invitation Code is Required")
 	}
 
-	// Set Property
-	return m.SetProperty("code", strings.ToLower(code), true)
+	return m.SetProperty("code", strings.ToLower(code))
 }
 
 func (m *InviteMessage) ByUser() string {
-	name, e := m.GetProperty("by-name")
-	if e != nil || name == nil {
-		return ""
+	p := m.Params()
+	if p != nil {
+		name, e := p.GetDefault("by-name", "")
+		if e == nil {
+			return name.(string)
+		}
 	}
 
-	return name.(string)
+	return ""
 }
 
 func (m *InviteMessage) SetByUser(name string) error {
@@ -107,17 +112,19 @@ func (m *InviteMessage) SetByUser(name string) error {
 		return errors.New("[InviteMessage] From User Name is Required")
 	}
 
-	// Set Property
-	return m.SetProperty("by-name", name, true)
+	return m.SetProperty("by-name", name)
 }
 
 func (m *InviteMessage) ByEmail() string {
-	email, e := m.GetProperty("by-email")
-	if e != nil || email == nil {
-		return ""
+	p := m.Params()
+	if p != nil {
+		email, e := p.GetDefault("by-email", "")
+		if e == nil {
+			return email.(string)
+		}
 	}
 
-	return email.(string)
+	return ""
 }
 
 func (m *InviteMessage) SetByEmail(email string) error {
@@ -127,37 +134,35 @@ func (m *InviteMessage) SetByEmail(email string) error {
 		return errors.New("[InviteMessage] From User Email is Required")
 	}
 
-	// Set Property
-	return m.SetProperty("by-email", strings.ToLower(email), true)
+	return m.SetProperty("by-email", strings.ToLower(email))
 }
 
 func (m *InviteMessage) Message() string {
-	msg, e := m.GetProperty("message")
-	if e != nil || msg == nil {
-		return ""
+	p := m.Params()
+	if p != nil {
+		email, e := p.GetDefault("message", "")
+		if e == nil {
+			return email.(string)
+		}
 	}
 
-	return msg.(string)
+	return ""
 }
 
 func (m *InviteMessage) SetMessage(msg string) error {
-	// Is Message Empty?
-	msg = strings.TrimSpace(msg)
-	if msg == "" {
-		return m.ClearProperty("message")
-	}
-
-	// Set Property
-	return m.SetProperty("message", msg, true)
+	return m.SetStringProperty("message", msg, true)
 }
 
 func (m *InviteMessage) ObjectName() string {
-	n, e := m.GetProperty("objectname")
-	if e != nil || n == nil {
-		return ""
+	p := m.Params()
+	if p != nil {
+		name, e := p.GetDefault("objectname", "")
+		if e == nil {
+			return name.(string)
+		}
 	}
 
-	return n.(string)
+	return ""
 }
 
 func (m *InviteMessage) SetObjectName(name string) error {
@@ -167,20 +172,19 @@ func (m *InviteMessage) SetObjectName(name string) error {
 		return errors.New("[InviteMessage] Object Name is Required")
 	}
 
-	e := m.SetProperty("objectname", name, true)
-	if e != nil {
-		return e
-	}
-	return nil
+	return m.SetProperty("objectname", name)
 }
 
 func (m *InviteMessage) StoreName() string {
-	n, e := m.GetProperty("storename")
-	if e != nil || n == nil {
-		return ""
+	p := m.Params()
+	if p != nil {
+		name, e := p.GetDefault("storename", "")
+		if e == nil {
+			return name.(string)
+		}
 	}
 
-	return n.(string)
+	return ""
 }
 
 func (m *InviteMessage) SetStoreName(name string) error {
@@ -190,27 +194,21 @@ func (m *InviteMessage) SetStoreName(name string) error {
 		return errors.New("[InviteMessage] Object Name is Required")
 	}
 
-	e := m.SetProperty("storename", name, true)
-	if e != nil {
-		return e
-	}
-	return nil
+	return m.SetProperty("storename", name)
 }
 
 func (m *InviteMessage) Expiration() *time.Time {
-	t, e := m.GetProperty("expiration")
-	if e != nil || t == nil {
-		return nil
-	}
-
-	return shared.FromJSONTimeStamp(t.(string))
-}
-
-func (m *InviteMessage) SetExpiration(t time.Time) error {
-	e := m.SetProperty("expiration", shared.ToJSONTimeStamp(&t), true)
-	if e != nil {
-		return e
+	p := m.Params()
+	if p != nil {
+		t, e := p.Get("expiration")
+		if e == nil || t != nil {
+			return shared.FromJSONTimeStamp(t.(string))
+		}
 	}
 
 	return nil
+}
+
+func (m *InviteMessage) SetExpiration(t time.Time) error {
+	return m.SetProperty("expiration", shared.ToJSONTimeStamp(&t))
 }

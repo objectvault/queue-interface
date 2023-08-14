@@ -18,7 +18,7 @@ import (
 	"log"
 	"strings"
 
-	"github.com/streadway/amqp"
+	amqp "github.com/rabbitmq/amqp091-go"
 
 	"github.com/objectvault/queue-interface/shared"
 )
